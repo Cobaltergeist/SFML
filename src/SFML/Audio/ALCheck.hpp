@@ -33,6 +33,7 @@
 #include <string>
 #include <al.h>
 #include <alc.h>
+#include <alext.h>
 
 
 namespace sf

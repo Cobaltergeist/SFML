@@ -129,12 +129,83 @@ public :
     bool openFromStream(InputStream& stream);
 
     ////////////////////////////////////////////////////////////
+    /// \brief Get the number of samples in the file
+    ///
+    /// This is the total number of samples in the input that was
+    /// opened by this music object
+    ///
+    /// \return Number of samples
+    ///
+    ////////////////////////////////////////////////////////////
+    std::size_t getSampleCount() const;
+
+    ////////////////////////////////////////////////////////////
     /// \brief Get the total duration of the music
     ///
     /// \return Music duration
     ///
     ////////////////////////////////////////////////////////////
     Time getDuration() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Get the position of the beginning of the sound's looping sequence
+    ///
+    /// \return Loop start position
+    ///
+    /// \see getLoopEnd, setLoopPointsFromTime, setLoopPointsFromSamples
+    ///
+    ////////////////////////////////////////////////////////////
+    Time getLoopStart() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Get the position of the end of the sound's looping sequence
+    ///
+    /// \return Loop end position
+    ///
+    /// \see getLoopStart, setLoopPointsFromTime, setLoopPointsFromSamples
+    ///
+    ////////////////////////////////////////////////////////////
+    Time getLoopEnd() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Sets the beginning and end of the sound's looping sequence using sf::Time
+    ///
+    /// Loop points allow one to specify a pair of positions such that, when the music
+    /// is enabled for looping, it will seamlessly seek to start whenever it encounters end.
+    /// The input values are clamped to the duration of the sound. If they are the same,
+    /// then a closed loop cannot be formed, and this function will "reset" the loop to the
+    /// full length of the sound. Note that the implicit "loop points" from the end to the
+    /// beginning of the stream are still honored. Because of this, "reverse" loop ranges,
+    /// where end comes before start, are allowed, and will cause the sound to loop everything
+    /// "outside" of the specified range. This function can be safely called at any point
+    /// after a stream is opened, and will be applied to a playing sound without affecting
+    /// the current playing offset.
+    ///
+    /// \param start    The offset of the beginning of the loop. Can be any time point within the sound's length
+    /// \param end      The offset of the end of the loop. If Time::Zero is passed, it defaults to the end of the sound
+    ///
+    /// \return True if the times were valid and the operation succeeded, false otherwise
+    ///
+    /// \see getLoopStart, getLoopEnd, setLoopPointsFromSamples
+    ///
+    ////////////////////////////////////////////////////////////
+    bool setLoopPointsFromTime(Time start = Time::Zero, Time end = Time::Zero);
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Sets the beginning and end of the sound's looping sequence using samples
+    ///
+    /// Used internally by setLoopPointsFromTime, this function can be used if one wants
+    /// to set the loop points of the sound to a pair of exact sample positions.
+    ///
+    /// \param start    The offset of the beginning of the loop. Can be any sample point within the sound's length
+    /// \param end      The offset of the end of the loop. If 0 is passed, it defaults to the end of the sound
+    ///
+    /// \return True if the times were valid and the operation succeeded, false otherwise
+    ///
+    /// \see getLoopStart, getLoopEnd, setLoopPointsFromTime
+    ///
+    ////////////////////////////////////////////////////////////
+    bool setLoopPointsFromSamples(Uint64 start = 0, Uint64 end = 0);
 
 protected :
 
@@ -159,6 +230,31 @@ protected :
     ////////////////////////////////////////////////////////////
     virtual void onSeek(Time timeOffset);
 
+    ////////////////////////////////////////////////////////////
+    /// \brief Change the current playing position in the stream source to the loop-start
+    ///
+    /// This is called by the underlying SoundStream whenever it needs us to
+    /// reset the seek position for a loop. We then determine whether we are
+    /// looping on a loop point or the end-of-file, perform the seek, and return the status.
+    ///
+    /// \return The end condition of this loop operation (file or loop)
+    ///
+    ////////////////////////////////////////////////////////////
+    virtual SoundStream::BufferEnd onLoop();
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Called to determine the "samples processed" count of the beginning of the loop
+    ///
+    /// This function is overriden to provide reliable implementation
+    /// of custom loop points.  We pass the sample position of the
+    /// loop start in order for getPlayingOffset() to track the
+    /// correct in-file position between loop iterations.
+    ///
+    /// \return The sample position of the loop start
+    ///
+    ////////////////////////////////////////////////////////////
+    virtual Uint64 getLoopSampleOffset();
+
 private :
 
     ////////////////////////////////////////////////////////////
@@ -170,10 +266,13 @@ private :
     ////////////////////////////////////////////////////////////
     // Member data
     ////////////////////////////////////////////////////////////
-    priv::SoundFile*   m_file;     ///< Sound file
-    Time               m_duration; ///< Music duration
-    std::vector<Int16> m_samples;  ///< Temporary buffer of samples
-    Mutex              m_mutex;    ///< Mutex protecting the data
+    priv::SoundFile*   m_file;          ///< Sound file
+    Uint64             m_sampleCount;   ///< Music duration
+    Uint64             m_seekPos;       ///< Sample Seek Position
+    Uint64             m_loopStart;     ///< Loop Start Point
+    Uint64             m_loopEnd;       ///< Loop End Point
+    std::vector<Int16> m_samples;       ///< Temporary buffer of samples
+    Mutex              m_mutex;         ///< Mutex protecting the data
 };
 
 } // namespace sf

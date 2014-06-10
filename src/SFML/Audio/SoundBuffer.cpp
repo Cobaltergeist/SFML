@@ -39,7 +39,9 @@ namespace sf
 ////////////////////////////////////////////////////////////
 SoundBuffer::SoundBuffer() :
 m_buffer  (0),
-m_duration()
+m_duration(),
+m_loopStart(),
+m_loopEnd()
 {
     priv::ensureALInit();
 
@@ -53,6 +55,8 @@ SoundBuffer::SoundBuffer(const SoundBuffer& copy) :
 m_buffer  (0),
 m_samples (copy.m_samples),
 m_duration(copy.m_duration),
+m_loopStart(copy.m_loopStart),
+m_loopEnd(copy.m_loopEnd),
 m_sounds  () // don't copy the attached sounds
 {
     // Create the buffer
@@ -196,13 +200,89 @@ Time SoundBuffer::getDuration() const
 
 
 ////////////////////////////////////////////////////////////
+Time SoundBuffer::getLoopStart() const
+{
+    return m_loopStart;
+}
+
+
+////////////////////////////////////////////////////////////
+Time SoundBuffer::getLoopEnd() const
+{
+    return m_loopEnd;
+}
+
+
+////////////////////////////////////////////////////////////
+bool SoundBuffer::setLoopPointsFromTime(Time start, Time end)
+{
+    float frequency = getSampleRate();      // Converted into the units we're using it for
+    return setLoopPointsFromSamples(static_cast<int>(start.asSeconds() * frequency), static_cast<int>(end.asSeconds() * frequency));
+}
+
+
+////////////////////////////////////////////////////////////
+bool SoundBuffer::setLoopPointsFromSamples(int start, int end)
+{
+    size_t channels = getChannelCount();	// This is used twice. Better only call once
+    float frequency = getSampleRate();		// Converted into the units we're using it for
+
+    // Check our state. This averts a divide-by-zero and potential OpenAL problems
+    if (!channels || !frequency || m_samples.empty())
+        return false;
+
+    int realSamples = static_cast<int>(m_samples.size()/channels);
+    if(start < 0)			        // Clamp start to 0
+        start = 0;
+    if(end > realSamples || !end)   // Clamp end to sample count, and 0 also means "reset"
+    	end = realSamples;
+    if (start == end)
+    {
+        start = 0;
+        end = realSamples;
+    }
+
+    // If the values are still wrong, abort
+    if (start > end)
+        return false;
+
+
+    // If everything checks out, apply the changes
+    m_loopStart = seconds(static_cast<float>(start) / frequency);
+    m_loopEnd = seconds(static_cast<float>(end) / frequency);
+
+    // Copied this part from update(). It didn't repeat much, and we don't touch the buffer contents
+
+    // First make a copy of the list of sounds so we can reattach later
+    SoundList sounds(m_sounds);
+
+    // Detach the buffer from the sounds that use it (to avoid OpenAL errors)
+    for (SoundList::const_iterator it = sounds.begin(); it != sounds.end(); ++it)
+        (*it)->resetBuffer();
+
+    // Set the loop points
+    // From what little documentation there is, it says you must do this without any sounds attached
+    int points[2] = {start, end};
+    alCheck(alBufferiv(m_buffer, AL_LOOP_POINTS_SOFT, points));
+
+    // Now reattach the buffer to the sounds that use it
+    for (SoundList::const_iterator it = sounds.begin(); it != sounds.end(); ++it)
+        (*it)->setBuffer(*this);
+
+    return true;
+}
+
+
+////////////////////////////////////////////////////////////
 SoundBuffer& SoundBuffer::operator =(const SoundBuffer& right)
 {
     SoundBuffer temp(right);
 
-    std::swap(m_samples,  temp.m_samples);
-    std::swap(m_buffer,   temp.m_buffer);
-    std::swap(m_duration, temp.m_duration);
+    std::swap(m_samples,    temp.m_samples);
+    std::swap(m_buffer,     temp.m_buffer);
+    std::swap(m_duration,   temp.m_duration);
+    std::swap(m_loopStart,  temp.m_loopStart);
+    std::swap(m_loopEnd,    temp.m_loopEnd);
     std::swap(m_sounds,   temp.m_sounds); // swap sounds too, so that they are detached when temp is destroyed
 
     return *this;
@@ -261,6 +341,12 @@ bool SoundBuffer::update(unsigned int channelCount, unsigned int sampleRate)
 
     // Compute the duration
     m_duration = seconds(static_cast<float>(m_samples.size()) / sampleRate / channelCount);
+
+    // Explicitly set the loop points to match the duration of the sound for the sake of consistency
+    int points[2] = {0, static_cast<int>(m_samples.size()/channelCount)};
+    alCheck(alBufferiv(m_buffer, AL_LOOP_POINTS_SOFT, points));
+    m_loopStart = sf::Time::Zero;
+    m_loopEnd = m_duration;
 
     // Now reattach the buffer to the sounds that use it
     for (SoundList::const_iterator it = sounds.begin(); it != sounds.end(); ++it)

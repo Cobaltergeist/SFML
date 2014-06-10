@@ -221,6 +221,67 @@ public :
     Time getDuration() const;
 
     ////////////////////////////////////////////////////////////
+    /// \brief Get the position of the beginning of the sound's looping sequence
+    ///
+    /// \return Loop start position
+    ///
+    /// \see getLoopEnd, setLoopPointsFromTime, setLoopPointsFromSamples
+    ///
+    ////////////////////////////////////////////////////////////
+    Time getLoopStart() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Get the position of the end of the sound's looping sequence
+    ///
+    /// \return Loop end position
+    ///
+    /// \see getLoopStart, setLoopPointsFromTime, setLoopPointsFromSamples
+    ///
+    ////////////////////////////////////////////////////////////
+    Time getLoopEnd() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Sets the beginning and end of the sound's looping sequence using sf::Time
+    ///
+    /// Loop points allow one to specify a pair of positions such that, when a sound
+    /// is enabled for looping, it will seamlessly seek to start whenever it encounters end.
+    /// The input values are clamped to the duration of the sound. If they are the same,
+    /// then a closed loop cannot be formed, and this function will "reset" the loop to the
+    /// full length of the sound. Note that unlike the sf::Music implementation of loop
+    /// points, the sf::SoundBuffer implementation is limited by OpenAL capabilities.
+    /// Ideally, this would go in sf::SoundSource, but OpenAL-Soft considers loop points to
+    /// be a buffer attribute. Calling this will stop any attached sf::SoundSource objects.
+    /// Also because of this, "reverse" loop ranges, where end comes before start, are not
+    /// allowed, and will cause this function to return false. This function can be safely
+    /// called at any point after a buffer is loaded, but is best done before attaching sounds.
+    ///
+    /// \param start    The offset of the beginning of the loop. Must be non-negative and less than end
+    /// \param end      The offset of the end of the loop. Must be greater than start and less-than-or-equal-to the file's duration
+    ///
+    /// \return True if the times were valid and the operation succeeded, false otherwise
+    ///
+    /// \see getLoopStart, getLoopEnd, setLoopPointsFromSamples
+    ///
+    ////////////////////////////////////////////////////////////
+    bool setLoopPointsFromTime(Time start = Time::Zero, Time end = Time::Zero);
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Sets the beginning and end of the sound's looping sequence using samples
+    ///
+    /// Used internally by setLoopPointsFromTime, this function can be used if one wants
+    /// to set the loop points of the sound to a pair of exact sample positions.
+    ///
+    /// \param start    The offset of the beginning of the loop. Must be non-negative and less than end
+    /// \param end      The offset of the end of the loop. Must be greater than start and less-than-or-equal-to the file's sample count
+    ///
+    /// \return True if the times were valid and the operation succeeded, false otherwise
+    ///
+    /// \see getLoopStart, getLoopEnd, setLoopPointsFromTime
+    ///
+    ////////////////////////////////////////////////////////////
+    bool setLoopPointsFromSamples(int start = 0, int end = 0);
+
+    ////////////////////////////////////////////////////////////
     /// \brief Overload of assignment operator
     ///
     /// \param right Instance to assign
@@ -279,10 +340,12 @@ private :
     ////////////////////////////////////////////////////////////
     // Member data
     ////////////////////////////////////////////////////////////
-    unsigned int       m_buffer;   ///< OpenAL buffer identifier
-    std::vector<Int16> m_samples;  ///< Samples buffer
-    Time               m_duration; ///< Sound duration
-    mutable SoundList  m_sounds;   ///< List of sounds that are using this buffer
+    unsigned int       m_buffer;    ///< OpenAL buffer identifier
+    std::vector<Int16> m_samples;   ///< Samples buffer
+    Time               m_duration;  ///< Sound duration
+    Time               m_loopStart; ///< Loop Start Point
+    Time               m_loopEnd;   ///< Loop End Point
+    mutable SoundList  m_sounds;    ///< List of sounds that are using this buffer
 };
 
 } // namespace sf

@@ -177,6 +177,13 @@ public :
 
 protected :
 
+    enum BufferEnd
+    {
+        NoEnd,          ///< Not an ending buffer
+        FileEnd,        ///< End of file
+        LoopEnd         ///< End of loop
+    };
+
     ////////////////////////////////////////////////////////////
     /// \brief Default constructor
     ///
@@ -227,6 +234,32 @@ protected :
     ///
     ////////////////////////////////////////////////////////////
     virtual void onSeek(Time timeOffset) = 0;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Change the current playing position in the stream source to the beginning of the loop
+    ///
+    /// This function can be overriden by derived classes to
+    /// allow implementation of custom loop points.
+    /// Otherwise, it just calls onSeek(Time::Zero)
+    ///
+    /// \return The end condition of this loop operation (file or loop)
+    ///
+    ////////////////////////////////////////////////////////////
+    virtual BufferEnd onLoop();
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Called to determine the "samples processed" count of the beginning of the loop
+    ///
+    /// This function can be overriden by derived classes to provide
+    /// reliable implementation of custom loop points.
+    /// Derived classes must pass the sample position of the loop start
+    /// in order for getPlayingOffset() to track the correct in-file
+    /// position between loop iterations. By default this returns 0.
+    ///
+    /// \return The sample position of the loop start
+    ///
+    ////////////////////////////////////////////////////////////
+    virtual Uint64 getLoopSampleOffset();
 
 private :
 
@@ -289,7 +322,7 @@ private :
     Uint32        m_format;                  ///< Format of the internal sound buffers
     bool          m_loop;                    ///< Loop flag (true to loop, false to play once)
     Uint64        m_samplesProcessed;        ///< Number of buffers processed since beginning of the stream
-    bool          m_endBuffers[BufferCount]; ///< Each buffer is marked as "end buffer" or not, for proper duration calculation
+    BufferEnd     m_endBuffers[BufferCount]; ///< Each buffer is marked as "end buffer" or not, for proper duration calculation
 };
 
 } // namespace sf

@@ -117,6 +117,7 @@ void SoundStream::pause()
 void SoundStream::stop()
 {
     // Wait for the thread to terminate
+    m_samplesProcessed = 0;
     m_isStreaming = false;
     m_thread.wait();
 }
@@ -197,12 +198,27 @@ bool SoundStream::getLoop() const
 
 
 ////////////////////////////////////////////////////////////
+SoundStream::BufferEnd SoundStream::onLoop()
+{
+    onSeek(Time::Zero);
+    return FileEnd;
+}
+
+
+////////////////////////////////////////////////////////////
+Uint64 SoundStream::getLoopSampleOffset()
+{
+    return 0;
+}
+
+
+////////////////////////////////////////////////////////////
 void SoundStream::streamData()
 {
     // Create the buffers
     alCheck(alGenBuffers(BufferCount, m_buffers));
     for (int i = 0; i < BufferCount; ++i)
-        m_endBuffers[i] = false;
+        m_endBuffers[i] = NoEnd;
 
     // Fill the queue
     bool requestStop = fillQueue();
@@ -247,11 +263,17 @@ void SoundStream::streamData()
                 }
 
             // Retrieve its size and add it to the samples count
-            if (m_endBuffers[bufferNum])
+            if (m_endBuffers[bufferNum] == FileEnd)
             {
-                // This was the last buffer: reset the sample count
+                // This was the last buffer before end-of-file: reset the sample count
                 m_samplesProcessed = 0;
-                m_endBuffers[bufferNum] = false;
+                m_endBuffers[bufferNum] = NoEnd;
+            }
+            else if (m_endBuffers[bufferNum] == LoopEnd)
+            {
+                // This was the last buffer before a loop point: reset the sample count
+                m_samplesProcessed = getLoopSampleOffset();
+                m_endBuffers[bufferNum] = NoEnd;
             }
             else
             {
@@ -310,14 +332,14 @@ bool SoundStream::fillAndPushBuffer(unsigned int bufferNum)
     Chunk data = {NULL, 0};
     if (!onGetData(data))
     {
-        // Mark the buffer as the last one (so that we know when to reset the playing position)
-        m_endBuffers[bufferNum] = true;
 
         // Check if the stream must loop or stop
         if (m_loop)
         {
-            // Return to the beginning of the stream source
-            onSeek(Time::Zero);
+            // Return to the beginning or loop-start of the stream source
+            // Mark the buffer as the last one (so that we know when to reset the playing position)
+            // Set it to the (possibly overridden) result of onLoop()
+            m_endBuffers[bufferNum] = onLoop();
 
             // If we previously had no data, try to fill the buffer once again
             if (!data.samples || (data.sampleCount == 0))
@@ -327,6 +349,8 @@ bool SoundStream::fillAndPushBuffer(unsigned int bufferNum)
         }
         else
         {
+            // Mark the buffer as the last one (so that we know when to reset the playing position)
+            m_endBuffers[bufferNum] = FileEnd;
             // Not looping: request stop
             requestStop = true;
         }
